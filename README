@@ -1,0 +1,131 @@
+**** Database creation process for Akins, Bitting, De Angelis, and Gaulin (2024) ****
+
+Copyright (c) 2024, Akins, Bitting, De Angelis, Gaulin - see LICENSE file for details
+
+**Notes**
+
+	1. The Dealscan database has altered its data structure since the data was pulled for this project in April of 2020.
+		The current data structure provided by Dealscan is in panel form, whereas the old structure features loan
+		loan characteristics spread across multiple data files. Our code was written to collect and format the
+		data in its older form. As such, the code presented here utilizes the following legacy Dealscan datafiles:
+
+		- company.sas7bdat
+		- facility.sas7bdat
+		- financialcovenant.sas7bdat
+		- lendershares.sas7bdat
+		- networthcovenant.sas7bdat
+		- package.sas7bdat
+		- performancepricing.sas7bdat
+		- performancepricingcomments.sas7bdat
+
+	2. To link the Dealscan data to other financial databases, we use the link provided by Michael Roberts. This data is
+		available on his website: https://finance.wharton.upenn.edu/~mrrobert/research.html. This data is converted
+		into a .DTA (STATA) format prior to being uploaded in the "duration_test_data_creation_1.sas" program.
+
+	3. Data from Incentive Lab is from April 2020 and is imported using a STATA format. The Incentive Lab datafiles are as follows:
+
+		- beneown.dta
+		- bhown.dta
+		- companyfy.dta
+		- comppeer.dta
+		- consultant.dta
+		- dircomp.dta
+		- exervest.dta
+		- gpbaabs.dta
+		- gpbaacc.dta
+		- gpbaaccpeer.dta
+		- gpbagrant.dta
+		- gpbarel.dta
+		- gpbarelpeer.dta
+		- holdingreq.dta
+		- oeoption.dta
+		- oestock.dta
+		- participantfy.dta
+		- sumcomp.dta
+
+	4. Data from Compustat is from March 2021 and is imported using a STATA (.dta) format. Specifically, we utilize the annual fundamental
+		file from Compustat, downloaded from WRDS.
+
+	5. Additional compensation data is pulled from EXECUCOMP via WRDS and is combined with DEALSCAN and COMPUSTAT data befre
+		 being imported using a STATA (.dta) format.
+
+	6. To link our primary database Incentive Lab we download the file containing GVKEY, CIK and FYEAR from Compustat Annual on the WRDS website (compustat_incentivelab_link.dta)
+
+	7. To link our primary database with bond data from TRACE and FISD we utilize the WRDS LINKS datafiles, specifically the CRSP-COMPUSTAT
+		link file and the TRACE_CRSP link file.
+
+	8. Bond return data is pulled from the TRACE Enhanced Dataset accessed via WRDS, and is imported using a STATA (.dta) format.
+
+	9. Equity return data is pulled from CRSP accessed via WRDS and is imported using a STATA (.dta) format.
+
+	10. CDS spread data is obtained from the Markit CDS end of day file and is imported using a STATA (.dta) format. (cds_spreads.dta)
+
+**Order of programs for main analysis (regression discontinuity analysis)**
+
+	1. 01_duration_test_data_creation_1.sas (SAS program)
+		--> Requires dealscan link
+		--> Requires Dealscan databases listed above
+		--> Requires Compustat Annual Fundamentals file
+		--> Requires ExecuComp Annual Compensation file
+		--> Creates "duration_test_data_1.dta"
+
+	2. 02_clean_combine_IL.do (STATA program)
+		--> Requires Incentive Lab databases listed above
+		--> Creates "incentivelab_master.dta"
+
+	3. 03_pull_variables.sas (SAS program)
+		--> Requires Compustat Annual Fundamentals file downloaded from WRDS (compustat_annual.dta)
+		--> Creates "compustat_variables.dta"
+
+	4. 04_lender_relations.sas (SAS program)
+		--> Requires dealscan link
+		--> Requires "package.sas7bdat", "facility.sas7bdat", "lendershares.sas7bdat" from Dealscan Database
+		--> Creates "lender_relations_start_by_packageid.dta"
+
+	5. 05_duration_test_data_creation_2.do (STATA program)
+		--> Requires "duration_test_data_1.dta"
+		--> Requires "compustat_incentivelab_link.dta" (see note above for creation)
+		--> Requires Compustat Annual Fundamentals file
+		--> Requires "lender_relations_start_by_packageid.dta"
+		--> Creates "duration_test_data_final.dta", the final analysis file for RDD analysis
+
+**Order of programs for CDS, bond return, and equity return analysis (event study analysis)**
+
+	6. 06_cds_eventstudy.do
+		--> Requires "cds_spreads.dta" in directory.
+		--> Requires loading "duration_test_data_final.dta" from step 4 above
+		--> Creates "filing_dates.dta" for CDS, bond and equity event studies
+			--> NOTE: It is necessary to construct this file with "cds_eventstudy.do" to perform bond/equity event studies
+		--> Creates "cds_final.dta", the final analysis file for CDS event study
+
+	7. 07_bond_eventstudy_enhanced.sas
+		--> Requires "filing_dates.dta" in directory
+		--> Requires WRDS link for Compustat-CRSP, CRSP-TRACE
+		--> Creates "bond_eventstudy.dta"
+
+	8. 08_bond_eventstudy.do
+		--> Requires "bond_eventstudy.dta" in directory
+		--> Requires "index_ret.dta" in directory; pulled from FRED database (see appendix 3 of paper)
+	 	--> Creates "bond_final.dta", the final analysis file for bond event study
+
+	9. 09_equity_eventstudy.do
+		--> Requires "filing_dates.dta" in directory
+		--> Method involves use of WRDS event study tool
+		--> Creates "equity_final.dta", the final analysis file for equity event study
+
+**Dependent Variable Notes**
+
+	Measure of Pay Horizon: total_horizon
+		--> Winsorized at (1st, 99th) with replacement; no truncation
+
+	Measure of Accounting Ratio: acct_ratio_wb
+		--> Winsorized at (1st, 99th) with replacement; no truncation
+
+	Measure of Short-Horizon Accounting Ratio: acct_short_ratio_wb
+		--> Winsorized at (1st, 99th) with replacement; no truncation
+
+**Independent Variable Notes**
+
+	Measure of Distance: dist
+		--> Differences between covenant thresholds and corresponding firm levels are winsorized at (1st, 99th) with replacement
+			at the covenant-type level (net worth, current ratio) prior to taking the minimum of these differences as dist
